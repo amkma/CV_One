@@ -139,7 +139,7 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             str(inp), str(odir / f"{tok}_lp.png"),
             P.get("filter_type", "gaussian"),
             _int(P.get("kernel_size"), 3),
-            _float(P.get("sigma"), 1.0),
+            _float(P.get("sigma_lp"), 1.0),
         )}
 
     if op == "edges":
