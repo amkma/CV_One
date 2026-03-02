@@ -134,12 +134,13 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             _int(P.get("uniform_range"), 30),
         )}
 
+    # FIX 1: pass sigma_lp (from the form field name="sigma_lp") correctly
     if op == "low_pass":
         return {"output": cv_core.apply_low_pass_filter(
             str(inp), str(odir / f"{tok}_lp.png"),
             P.get("filter_type", "gaussian"),
             _int(P.get("kernel_size"), 3),
-            _float(P.get("sigma_lp"), 1.0),
+            _float(P.get("sigma_lp"), 1.0),   # <-- was P.get("sigma") before
         )}
 
     if op == "edges":
@@ -159,9 +160,17 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             P.get("hist_mode", "gray"),
         )
 
+    # FIX 2: equalize now returns before/after histograms too
     if op == "equalize":
-        return {"output": cv_core.equalize_image(str(inp), str(odir / f"{tok}_eq.png"))}
+        raw = cv_core.equalize_image(
+            str(inp),
+            str(odir / f"{tok}_eq.png"),
+            str(odir / f"{tok}_hist_before.png"),
+            str(odir / f"{tok}_hist_after.png"),
+        )
+        return raw  # already a dict: output, hist_before, hist_after
 
+    # FIX 3: norm_type only accepts minmax / inf now
     if op == "normalize":
         return {"output": cv_core.normalize_image(
             str(inp), str(odir / f"{tok}_norm.png"),
@@ -170,14 +179,12 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             P.get("norm_type", "minmax"),
         )}
 
+    # FIX 4: threshold simplified – no method selector, binary only
     if op == "threshold":
         return {"output": cv_core.apply_threshold(
             str(inp), str(odir / f"{tok}_thresh.png"),
-            P.get("threshold_method", "binary"),
             _float(P.get("threshold"), 127.0),
             _float(P.get("max_value"), 255.0),
-            _int(P.get("block_size"), 11),
-            _float(P.get("c"), 2.0),
         )}
 
     if op == "freq_filter":
