@@ -134,13 +134,12 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             _int(P.get("uniform_range"), 30),
         )}
 
-    # FIX 1: pass sigma_lp (from the form field name="sigma_lp") correctly
     if op == "low_pass":
         return {"output": cv_core.apply_low_pass_filter(
             str(inp), str(odir / f"{tok}_lp.png"),
             P.get("filter_type", "gaussian"),
             _int(P.get("kernel_size"), 3),
-            _float(P.get("sigma_lp"), 1.0),   # <-- was P.get("sigma") before
+            _float(P.get("sigma_lp"), 1.0),
         )}
 
     if op == "edges":
@@ -160,17 +159,13 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             P.get("hist_mode", "gray"),
         )
 
-    # FIX 2: equalize now returns before/after histograms too
+    # PROBLEM 1 FIX: equalize now takes only input + prefix.
+    # C++ produces output_gray, output_color_eq,
+    # before_gray/b/g/r and after_gray/b/g/r.
     if op == "equalize":
-        raw = cv_core.equalize_image(
-            str(inp),
-            str(odir / f"{tok}_eq.png"),
-            str(odir / f"{tok}_hist_before.png"),
-            str(odir / f"{tok}_hist_after.png"),
-        )
-        return raw  # already a dict: output, hist_before, hist_after
+        prefix = str(odir / tok)
+        return cv_core.equalize_image(str(inp), prefix)
 
-    # FIX 3: norm_type only accepts minmax / inf now
     if op == "normalize":
         return {"output": cv_core.normalize_image(
             str(inp), str(odir / f"{tok}_norm.png"),
@@ -179,7 +174,7 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             P.get("norm_type", "minmax"),
         )}
 
-    # FIX 4: threshold simplified – no method selector, binary only
+    # PROBLEM 2 FIX: threshold uses Binary method (displayed in UI)
     if op == "threshold":
         return {"output": cv_core.apply_threshold(
             str(inp), str(odir / f"{tok}_thresh.png"),
@@ -208,5 +203,10 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             ),
             "second_input": str(inp2),
         }
+
+    # PROBLEM 3 FIX: new transformation operation
+    if op == "transformation":
+        prefix = str(odir / tok)
+        return cv_core.color_to_gray_transform(str(inp), prefix)
 
     raise ValueError(f"Unknown operation: {op}")

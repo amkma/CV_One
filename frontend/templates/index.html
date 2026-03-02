@@ -32,6 +32,8 @@
             <option value="threshold">Thresholding</option>
             <option value="freq_filter">Frequency filter</option>
             <option value="hybrid">Hybrid image</option>
+            <!-- PROBLEM 3 FIX: new transformation operation -->
+            <option value="transformation">Transformation (Color → Gray + RGB plots)</option>
           </select>
         </div>
 
@@ -81,11 +83,6 @@
               <option value="median">Median</option>
             </select>
           </div>
-          <!--
-            FIX 1: field name is "sigma_lp" (distinct from noise sigma).
-            views.py reads P.get("sigma_lp") and passes it to C++ as sigma.
-            Changing this value now visibly affects the Gaussian blur output.
-          -->
           <div class="row" data-op="low_pass">
             <label for="sigma_lp">Gaussian sigma</label>
             <input id="sigma_lp" name="sigma_lp" type="number" step="0.1" min="0.1" value="1.0" />
@@ -124,7 +121,7 @@
           </div>
         </section>
 
-        <!-- ── Normalize ── FIX 3: l1 and l2 removed ── -->
+        <!-- ── Normalize ── -->
         <section class="group" data-op="normalize">
           <div class="row">
             <label for="alpha">Normalize alpha</label>
@@ -143,8 +140,20 @@
           </div>
         </section>
 
-        <!-- ── Threshold ── FIX 4: binary only, method selector removed ── -->
+        <!--
+          PROBLEM 2 FIX: threshold method is Binary (cv::THRESH_BINARY).
+          Rule: pixel > threshold → max_value, else → 0.
+          The label "Binary" is now shown explicitly.
+        -->
         <section class="group" data-op="threshold">
+          <div class="row">
+            <label>Threshold method</label>
+            <span style="line-height:36px; font-weight:600;">Binary
+              <small style="font-weight:400; color:#6b7280;">
+                (pixel &gt; threshold → max_value, else 0)
+              </small>
+            </span>
+          </div>
           <div class="row">
             <label for="threshold">Threshold value</label>
             <input id="threshold" name="threshold" type="number" step="0.1" value="127" />
@@ -183,6 +192,16 @@
           <div class="row">
             <label for="mix_weight">Mix weight (0-1)</label>
             <input id="mix_weight" name="mix_weight" type="number" step="0.01" min="0" max="1" value="0.5" />
+          </div>
+        </section>
+
+        <!-- ── Transformation: no extra controls needed ── -->
+        <section class="group" data-op="transformation">
+          <div class="row">
+            <label>Output</label>
+            <span style="line-height:36px; color:#6b7280;">
+              Grayscale image + Histogram &amp; CDF for Gray, R, G, B channels
+            </span>
           </div>
         </section>
 

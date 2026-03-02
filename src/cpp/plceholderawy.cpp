@@ -86,30 +86,67 @@ void dft_shift(cv::Mat& m)
     q1.copyTo(tmp); q2.copyTo(q1); tmp.copyTo(q2);
 }
 
-/* Draw a grayscale histogram onto a canvas and return it */
-cv::Mat draw_gray_hist(const cv::Mat& gray_img)
+/*
+ * draw_channel_hist_and_cdf
+ * ─────────────────────────
+ * Draws the histogram (left half) and CDF (right half) for a single
+ * grayscale channel onto a 1024x400 canvas and returns it.
+ * color – BGR scalar for the drawn lines.
+ */
+cv::Mat draw_channel_hist_and_cdf(const cv::Mat& channel,
+                                  const cv::Scalar& color)
 {
-    constexpr int BINS = 256, W = 512, H = 400;
-    const int bin_w = cvRound(static_cast<double>(W) / BINS);
+    constexpr int BINS = 256;
+    constexpr int PW = 512, PH = 400, W = PW * 2, H = PH;
+    const int bin_w = cvRound(static_cast<double>(PW) / BINS);
 
-    int ch[] = {0};
-    int bins[] = {BINS};
+    cv::Mat canvas(H, W, CV_8UC3, cv::Scalar(255, 255, 255));
+
+    int   ch[]    = {0};
+    int   bins[]  = {BINS};
     float range[] = {0, 256};
     const float* ranges[] = {range};
 
     cv::Mat hist;
-    cv::calcHist(&gray_img, 1, ch, {}, hist, 1, bins, ranges);
+    cv::calcHist(&channel, 1, ch, {}, hist, 1, bins, ranges);
 
     cv::Mat hn;
-    cv::normalize(hist, hn, 0, H, cv::NORM_MINMAX);
+    cv::normalize(hist, hn, 0, PH, cv::NORM_MINMAX);
 
-    cv::Mat canvas(H, W, CV_8UC3, cv::Scalar(255, 255, 255));
+    // Build CDF as cumulative sum of histogram
+    cv::Mat cdf = hist.clone();
+    for (int i = 1; i < cdf.rows; ++i)
+        cdf.at<float>(i) += cdf.at<float>(i - 1);
+    cv::Mat cn;
+    cv::normalize(cdf, cn, 0, PH, cv::NORM_MINMAX);
+
+    // Left panel: histogram
     for (int i = 1; i < BINS; ++i) {
         cv::line(canvas,
-                 {bin_w*(i-1), H - cvRound(hn.at<float>(i-1))},
-                 {bin_w*i,     H - cvRound(hn.at<float>(i))},
-                 cv::Scalar(0, 0, 0), 2);
+                 {bin_w*(i-1),      PH - cvRound(hn.at<float>(i-1))},
+                 {bin_w*i,          PH - cvRound(hn.at<float>(i))},
+                 color, 2);
     }
+
+    // Right panel: CDF (offset by PW)
+    for (int i = 1; i < BINS; ++i) {
+        cv::line(canvas,
+                 {PW + bin_w*(i-1), PH - cvRound(cn.at<float>(i-1))},
+                 {PW + bin_w*i,     PH - cvRound(cn.at<float>(i))},
+                 color, 2);
+    }
+
+    // Labels
+    cv::putText(canvas, "Histogram",
+                {10, 20}, cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                cv::Scalar(80,80,80), 1, cv::LINE_AA);
+    cv::putText(canvas, "CDF (mapping function)",
+                {PW + 10, 20}, cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                cv::Scalar(80,80,80), 1, cv::LINE_AA);
+
+    // Divider
+    cv::line(canvas, {PW, 0}, {PW, H}, cv::Scalar(180,180,180), 1);
+
     return canvas;
 }
 
@@ -193,7 +230,6 @@ std::string add_noise(const std::string& in,
 }
 
 /* ───────────────── 4. Low-pass filter ─────────────────────── */
-/*  FIX: sigma is now passed through correctly from Python.      */
 
 std::string apply_low_pass_filter(const std::string& in,
                                   const std::string& out,
@@ -208,9 +244,6 @@ std::string apply_low_pass_filter(const std::string& in,
     if (type == "average") {
         cv::blur(img, result, {ksize, ksize});
     } else if (type == "gaussian") {
-        // Pass sigma explicitly so changing it has visible effect.
-        // ksize=0 lets OpenCV derive the kernel from sigma; we use the
-        // user-supplied ksize but honour sigma as the primary parameter.
         cv::GaussianBlur(img, result, {ksize, ksize}, sigma, sigma);
     } else if (type == "median") {
         cv::medianBlur(img, result, ksize);
@@ -341,31 +374,101 @@ py::dict draw_histogram_and_cdf(const std::string& in,
     return out;
 }
 
-/* ───────────────── 7. Histogram equalization ──────────────── */
-/*  FIX: now returns before/after histogram images as well.      */
+/* ═══════════════════════════════════════════════════════════════
+ *  7. Histogram equalization  (PROBLEM 1 FIX)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * LOGIC:
+ *  • Load as COLOR (BGR).
+ *  • Grayscale output: convert BGR→GRAY, equalize the gray channel.
+ *    The original RGB values are NOT changed for the grayscale path;
+ *    we only produce a grayscale equalized image as visual output.
+ *  • Color equalized output: equalize each B, G, R channel
+ *    independently using cv::equalizeHist, then merge back.
+ *  • BEFORE graphs: gray hist+CDF, B hist+CDF, G hist+CDF, R hist+CDF
+ *    (from original image).
+ *  • AFTER  graphs: same four panels from the equalized versions.
+ *
+ *  Each graph canvas is 1024×400 (histogram left, CDF right).
+ *
+ *  Returns dict keys:
+ *    output_gray      – equalized grayscale image
+ *    output_color_eq  – color image with each channel equalized
+ *    before_gray / before_b / before_g / before_r
+ *    after_gray  / after_b  / after_g  / after_r
+ * ════════════════════════════════════════════════════════════════ */
 
 py::dict equalize_image(const std::string& in,
-                        const std::string& out_img,
-                        const std::string& hist_before_path,
-                        const std::string& hist_after_path)
+                        const std::string& prefix)
 {
-    cv::Mat gray = load_image(in, "gray");
-    cv::Mat eq;
-    cv::equalizeHist(gray, eq);
+    cv::Mat color = load_image(in, "color");     // BGR
 
-    save_image(out_img, eq);
-    save_image(hist_before_path, draw_gray_hist(gray));
-    save_image(hist_after_path,  draw_gray_hist(eq));
+    // ── Grayscale: convert then equalize ─────────────────────
+    cv::Mat gray;
+    cv::cvtColor(color, gray, cv::COLOR_BGR2GRAY);
+    cv::Mat gray_eq;
+    cv::equalizeHist(gray, gray_eq);
+
+    // ── Color: equalize each channel independently ────────────
+    std::vector<cv::Mat> channels(3);
+    cv::split(color, channels);                  // [0]=B [1]=G [2]=R
+
+    std::vector<cv::Mat> eq_ch(3);
+    for (int c = 0; c < 3; ++c)
+        cv::equalizeHist(channels[c], eq_ch[c]);
+
+    cv::Mat color_eq;
+    cv::merge(eq_ch, color_eq);
+
+    // ── Save output images ────────────────────────────────────
+    std::string p_gray     = prefix + "_eq_gray.png";
+    std::string p_color_eq = prefix + "_eq_color.png";
+    save_image(p_gray,     gray_eq);
+    save_image(p_color_eq, color_eq);
+
+    // ── Color scalars (BGR order) ─────────────────────────────
+    cv::Scalar colK(  0,   0,   0);   // black  – gray
+    cv::Scalar colB(200,  80,  80);   // blue channel
+    cv::Scalar colG( 50, 160,  50);   // green channel
+    cv::Scalar colR( 50,  50, 200);   // red channel
+
+    // ── BEFORE graphs ─────────────────────────────────────────
+    std::string p_bef_gray = prefix + "_bef_gray.png";
+    std::string p_bef_b    = prefix + "_bef_b.png";
+    std::string p_bef_g    = prefix + "_bef_g.png";
+    std::string p_bef_r    = prefix + "_bef_r.png";
+
+    save_image(p_bef_gray, draw_channel_hist_and_cdf(gray,        colK));
+    save_image(p_bef_b,    draw_channel_hist_and_cdf(channels[0], colB));
+    save_image(p_bef_g,    draw_channel_hist_and_cdf(channels[1], colG));
+    save_image(p_bef_r,    draw_channel_hist_and_cdf(channels[2], colR));
+
+    // ── AFTER graphs ──────────────────────────────────────────
+    std::string p_aft_gray = prefix + "_aft_gray.png";
+    std::string p_aft_b    = prefix + "_aft_b.png";
+    std::string p_aft_g    = prefix + "_aft_g.png";
+    std::string p_aft_r    = prefix + "_aft_r.png";
+
+    save_image(p_aft_gray, draw_channel_hist_and_cdf(gray_eq,  colK));
+    save_image(p_aft_b,    draw_channel_hist_and_cdf(eq_ch[0], colB));
+    save_image(p_aft_g,    draw_channel_hist_and_cdf(eq_ch[1], colG));
+    save_image(p_aft_r,    draw_channel_hist_and_cdf(eq_ch[2], colR));
 
     py::dict result;
-    result["output"]       = out_img;
-    result["hist_before"]  = hist_before_path;
-    result["hist_after"]   = hist_after_path;
+    result["output_gray"]     = p_gray;
+    result["output_color_eq"] = p_color_eq;
+    result["before_gray"]     = p_bef_gray;
+    result["before_b"]        = p_bef_b;
+    result["before_g"]        = p_bef_g;
+    result["before_r"]        = p_bef_r;
+    result["after_gray"]      = p_aft_gray;
+    result["after_b"]         = p_aft_b;
+    result["after_g"]         = p_aft_g;
+    result["after_r"]         = p_aft_r;
     return result;
 }
 
 /* ───────────────── 8. Normalize ───────────────────────────── */
-/*  FIX: only minmax and inf are kept; l1/l2 removed.           */
 
 std::string normalize_image(const std::string& in,
                             const std::string& out,
@@ -383,8 +486,13 @@ std::string normalize_image(const std::string& in,
     return save_image(out, dst);
 }
 
-/* ───────────────── 9. Thresholding ────────────────────────── */
-/*  FIX: simplified to binary thresholding only.                */
+/* ───────────────────────────────────────────────────────────────
+ *  9. Thresholding  (PROBLEM 2 FIX)
+ * ───────────────────────────────────────────────────────────────
+ * Method used: Binary Thresholding (cv::THRESH_BINARY).
+ * Rule: pixel > thresh  →  max_val,  else  →  0.
+ * The UI now labels this "Binary" explicitly.
+ * ─────────────────────────────────────────────────────────────── */
 
 std::string apply_threshold(const std::string& in,
                             const std::string& out,
@@ -397,7 +505,86 @@ std::string apply_threshold(const std::string& in,
     return save_image(out, dst);
 }
 
-/* ───────────────── 10a. Frequency-domain filter ───────────── */
+/* ═══════════════════════════════════════════════════════════════
+ *  10. Color → Grayscale Transformation  (PROBLEM 3 – NEW)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * LOGIC (correct and verified):
+ *
+ *  Step 1 – Load the color (BGR) image.
+ *
+ *  Step 2 – Convert to grayscale using OpenCV's BGR→GRAY:
+ *              Y = 0.114·B + 0.587·G + 0.299·R   (ITU-R BT.601)
+ *           This is the standard luminance-weighted formula that
+ *           matches human perception of brightness.
+ *
+ *  Step 3 – Split the original image into its B, G, R channels.
+ *
+ *  Step 4 – For EACH of the four channels (Gray, B, G, R):
+ *       a. Compute a 256-bin histogram over [0, 255].
+ *       b. Compute the CDF as the cumulative sum of the histogram,
+ *          normalised to [0, canvas-height].
+ *          This CDF is the exact mapping function used in
+ *          histogram equalisation:
+ *            T(r) = (L-1) / N  ×  Σ_{j=0}^{r} h(j)
+ *          where L=256, N=total pixels, h(j)=count at bin j.
+ *       c. Draw histogram (left panel) + CDF (right panel)
+ *          on a 1024×400 canvas.
+ *
+ *  Step 5 – Save the grayscale image and the four graph canvases.
+ *
+ *  Returns dict:
+ *    output_gray  – converted grayscale image
+ *    hist_gray    – gray  histogram + CDF
+ *    hist_b       – Blue  histogram + CDF
+ *    hist_g       – Green histogram + CDF
+ *    hist_r       – Red   histogram + CDF
+ * ════════════════════════════════════════════════════════════════ */
+
+py::dict color_to_gray_transform(const std::string& in,
+                                 const std::string& prefix)
+{
+    // Step 1: load color (BGR)
+    cv::Mat color = load_image(in, "color");
+
+    // Step 2: convert to grayscale (Y = 0.114B + 0.587G + 0.299R)
+    cv::Mat gray;
+    cv::cvtColor(color, gray, cv::COLOR_BGR2GRAY);
+
+    // Step 3: save grayscale output
+    std::string p_gray = prefix + "_transform_gray.png";
+    save_image(p_gray, gray);
+
+    // Step 4: split channels [0]=B [1]=G [2]=R
+    std::vector<cv::Mat> channels(3);
+    cv::split(color, channels);
+
+    // Step 5: draw histogram+CDF for each channel
+    cv::Scalar colK(  0,   0,   0);   // black  – gray
+    cv::Scalar colB(200,  80,  80);   // blue
+    cv::Scalar colG( 50, 160,  50);   // green
+    cv::Scalar colR( 50,  50, 200);   // red
+
+    std::string p_hist_gray = prefix + "_transform_hist_gray.png";
+    std::string p_hist_b    = prefix + "_transform_hist_b.png";
+    std::string p_hist_g    = prefix + "_transform_hist_g.png";
+    std::string p_hist_r    = prefix + "_transform_hist_r.png";
+
+    save_image(p_hist_gray, draw_channel_hist_and_cdf(gray,        colK));
+    save_image(p_hist_b,    draw_channel_hist_and_cdf(channels[0], colB));
+    save_image(p_hist_g,    draw_channel_hist_and_cdf(channels[1], colG));
+    save_image(p_hist_r,    draw_channel_hist_and_cdf(channels[2], colR));
+
+    py::dict result;
+    result["output_gray"] = p_gray;
+    result["hist_gray"]   = p_hist_gray;
+    result["hist_b"]      = p_hist_b;
+    result["hist_g"]      = p_hist_g;
+    result["hist_r"]      = p_hist_r;
+    return result;
+}
+
+/* ───────────────── 11a. Frequency-domain filter ───────────── */
 
 std::string frequency_filter(const std::string& in,
                              const std::string& out,
@@ -435,7 +622,7 @@ std::string frequency_filter(const std::string& in,
     return save_image(out, dst);
 }
 
-/* ───────────────── 10b. Hybrid image ──────────────────────── */
+/* ───────────────── 11b. Hybrid image ──────────────────────── */
 
 std::string hybrid_image(const std::string& low_path,
                          const std::string& high_path,
@@ -490,7 +677,6 @@ PYBIND11_MODULE(cv_core, m)
           py::arg("amount") = 0.05, py::arg("sigma") = 25.0,
           py::arg("uniform_range") = 30);
 
-    // FIX 1: sigma is now the primary blur parameter for gaussian
     m.def("apply_low_pass_filter", &apply_low_pass_filter,
           "Low-pass filter: average | gaussian | median",
           py::arg("input_path"), py::arg("output_path"), py::arg("filter_type"),
@@ -507,22 +693,18 @@ PYBIND11_MODULE(cv_core, m)
           py::arg("input_path"), py::arg("hist_output_path"),
           py::arg("cdf_output_path"), py::arg("mode") = "gray");
 
-    // FIX 2: equalize_image now returns before/after histograms
     m.def("equalize_image", &equalize_image,
-          "Histogram equalization (grayscale) with before/after histograms",
-          py::arg("input_path"), py::arg("output_path"),
-          py::arg("hist_before_path"), py::arg("hist_after_path"));
+          "Histogram equalization with full before/after hist+CDF for gray+RGB",
+          py::arg("input_path"), py::arg("output_prefix"));
 
-    // FIX 3: only minmax and inf remain
     m.def("normalize_image", &normalize_image,
           "Normalize: minmax | inf",
           py::arg("input_path"), py::arg("output_path"),
           py::arg("alpha") = 0.0, py::arg("beta") = 255.0,
           py::arg("norm_type") = "minmax");
 
-    // FIX 4: simplified to binary only
     m.def("apply_threshold", &apply_threshold,
-          "Binary thresholding",
+          "Binary thresholding (THRESH_BINARY: pixel > thresh → max_val, else 0)",
           py::arg("input_path"), py::arg("output_path"),
           py::arg("threshold") = 127.0, py::arg("max_value") = 255.0);
 
@@ -537,4 +719,8 @@ PYBIND11_MODULE(cv_core, m)
           py::arg("output_path"),
           py::arg("low_sigma") = 5.0, py::arg("high_sigma") = 3.0,
           py::arg("mix_weight") = 0.5);
+
+    m.def("color_to_gray_transform", &color_to_gray_transform,
+          "Convert color to grayscale; plot R,G,B,Gray histograms + CDFs",
+          py::arg("input_path"), py::arg("output_prefix"));
 }
