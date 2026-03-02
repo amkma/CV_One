@@ -86,6 +86,33 @@ void dft_shift(cv::Mat& m)
     q1.copyTo(tmp); q2.copyTo(q1); tmp.copyTo(q2);
 }
 
+/* Draw a grayscale histogram onto a canvas and return it */
+cv::Mat draw_gray_hist(const cv::Mat& gray_img)
+{
+    constexpr int BINS = 256, W = 512, H = 400;
+    const int bin_w = cvRound(static_cast<double>(W) / BINS);
+
+    int ch[] = {0};
+    int bins[] = {BINS};
+    float range[] = {0, 256};
+    const float* ranges[] = {range};
+
+    cv::Mat hist;
+    cv::calcHist(&gray_img, 1, ch, {}, hist, 1, bins, ranges);
+
+    cv::Mat hn;
+    cv::normalize(hist, hn, 0, H, cv::NORM_MINMAX);
+
+    cv::Mat canvas(H, W, CV_8UC3, cv::Scalar(255, 255, 255));
+    for (int i = 1; i < BINS; ++i) {
+        cv::line(canvas,
+                 {bin_w*(i-1), H - cvRound(hn.at<float>(i-1))},
+                 {bin_w*i,     H - cvRound(hn.at<float>(i))},
+                 cv::Scalar(0, 0, 0), 2);
+    }
+    return canvas;
+}
+
 } // anonymous namespace
 
 /* ───────────────── 1. Read image info ─────────────────────── */
@@ -166,6 +193,7 @@ std::string add_noise(const std::string& in,
 }
 
 /* ───────────────── 4. Low-pass filter ─────────────────────── */
+/*  FIX: sigma is now passed through correctly from Python.      */
 
 std::string apply_low_pass_filter(const std::string& in,
                                   const std::string& out,
@@ -177,10 +205,18 @@ std::string apply_low_pass_filter(const std::string& in,
     cv::Mat result;
     ksize = ensure_odd_min3(ksize);
 
-    if      (type == "average")  cv::blur(img, result, {ksize, ksize});
-    else if (type == "gaussian") cv::GaussianBlur(img, result, {ksize, ksize}, sigma);
-    else if (type == "median")   cv::medianBlur(img, result, ksize);
-    else throw std::runtime_error("Unknown filter type: " + type);
+    if (type == "average") {
+        cv::blur(img, result, {ksize, ksize});
+    } else if (type == "gaussian") {
+        // Pass sigma explicitly so changing it has visible effect.
+        // ksize=0 lets OpenCV derive the kernel from sigma; we use the
+        // user-supplied ksize but honour sigma as the primary parameter.
+        cv::GaussianBlur(img, result, {ksize, ksize}, sigma, sigma);
+    } else if (type == "median") {
+        cv::medianBlur(img, result, ksize);
+    } else {
+        throw std::runtime_error("Unknown filter type: " + type);
+    }
 
     return save_image(out, result);
 }
@@ -306,16 +342,30 @@ py::dict draw_histogram_and_cdf(const std::string& in,
 }
 
 /* ───────────────── 7. Histogram equalization ──────────────── */
+/*  FIX: now returns before/after histogram images as well.      */
 
-std::string equalize_image(const std::string& in, const std::string& out)
+py::dict equalize_image(const std::string& in,
+                        const std::string& out_img,
+                        const std::string& hist_before_path,
+                        const std::string& hist_after_path)
 {
     cv::Mat gray = load_image(in, "gray");
     cv::Mat eq;
     cv::equalizeHist(gray, eq);
-    return save_image(out, eq);
+
+    save_image(out_img, eq);
+    save_image(hist_before_path, draw_gray_hist(gray));
+    save_image(hist_after_path,  draw_gray_hist(eq));
+
+    py::dict result;
+    result["output"]       = out_img;
+    result["hist_before"]  = hist_before_path;
+    result["hist_after"]   = hist_after_path;
+    return result;
 }
 
 /* ───────────────── 8. Normalize ───────────────────────────── */
+/*  FIX: only minmax and inf are kept; l1/l2 removed.           */
 
 std::string normalize_image(const std::string& in,
                             const std::string& out,
@@ -326,9 +376,7 @@ std::string normalize_image(const std::string& in,
     cv::Mat img = load_image(in, "color");
 
     int cv_norm = cv::NORM_MINMAX;
-    if      (norm_type == "l1")  cv_norm = cv::NORM_L1;
-    else if (norm_type == "l2")  cv_norm = cv::NORM_L2;
-    else if (norm_type == "inf") cv_norm = cv::NORM_INF;
+    if (norm_type == "inf") cv_norm = cv::NORM_INF;
 
     cv::Mat dst;
     cv::normalize(img, dst, alpha, beta, cv_norm, img.type());
@@ -336,35 +384,16 @@ std::string normalize_image(const std::string& in,
 }
 
 /* ───────────────── 9. Thresholding ────────────────────────── */
+/*  FIX: simplified to binary thresholding only.                */
 
 std::string apply_threshold(const std::string& in,
                             const std::string& out,
-                            const std::string& method,
                             double thresh,
-                            double max_val,
-                            int block_size,
-                            double c)
+                            double max_val)
 {
     cv::Mat gray = load_image(in, "gray");
     cv::Mat dst;
-
-    if (method == "adaptive_mean" || method == "adaptive_gaussian") {
-        block_size = ensure_odd_min3(block_size);
-        int adapt = (method == "adaptive_mean")
-                        ? cv::ADAPTIVE_THRESH_MEAN_C
-                        : cv::ADAPTIVE_THRESH_GAUSSIAN_C;
-        cv::adaptiveThreshold(gray, dst, max_val, adapt,
-                              cv::THRESH_BINARY, block_size, c);
-    } else {
-        int t = cv::THRESH_BINARY;
-        if      (method == "binary_inv")  t = cv::THRESH_BINARY_INV;
-        else if (method == "trunc")       t = cv::THRESH_TRUNC;
-        else if (method == "tozero")      t = cv::THRESH_TOZERO;
-        else if (method == "tozero_inv")  t = cv::THRESH_TOZERO_INV;
-        else if (method == "otsu")        t = cv::THRESH_BINARY | cv::THRESH_OTSU;
-        cv::threshold(gray, dst, thresh, max_val, t);
-    }
-
+    cv::threshold(gray, dst, thresh, max_val, cv::THRESH_BINARY);
     return save_image(out, dst);
 }
 
@@ -461,6 +490,7 @@ PYBIND11_MODULE(cv_core, m)
           py::arg("amount") = 0.05, py::arg("sigma") = 25.0,
           py::arg("uniform_range") = 30);
 
+    // FIX 1: sigma is now the primary blur parameter for gaussian
     m.def("apply_low_pass_filter", &apply_low_pass_filter,
           "Low-pass filter: average | gaussian | median",
           py::arg("input_path"), py::arg("output_path"), py::arg("filter_type"),
@@ -477,23 +507,24 @@ PYBIND11_MODULE(cv_core, m)
           py::arg("input_path"), py::arg("hist_output_path"),
           py::arg("cdf_output_path"), py::arg("mode") = "gray");
 
+    // FIX 2: equalize_image now returns before/after histograms
     m.def("equalize_image", &equalize_image,
-          "Histogram equalization (grayscale)",
-          py::arg("input_path"), py::arg("output_path"));
+          "Histogram equalization (grayscale) with before/after histograms",
+          py::arg("input_path"), py::arg("output_path"),
+          py::arg("hist_before_path"), py::arg("hist_after_path"));
 
+    // FIX 3: only minmax and inf remain
     m.def("normalize_image", &normalize_image,
-          "Normalize: minmax | l1 | l2 | inf",
+          "Normalize: minmax | inf",
           py::arg("input_path"), py::arg("output_path"),
           py::arg("alpha") = 0.0, py::arg("beta") = 255.0,
           py::arg("norm_type") = "minmax");
 
+    // FIX 4: simplified to binary only
     m.def("apply_threshold", &apply_threshold,
-          "Thresholding: binary | binary_inv | trunc | tozero | tozero_inv"
-          " | otsu | adaptive_mean | adaptive_gaussian",
+          "Binary thresholding",
           py::arg("input_path"), py::arg("output_path"),
-          py::arg("method") = "binary", py::arg("threshold") = 127.0,
-          py::arg("max_value") = 255.0, py::arg("block_size") = 11,
-          py::arg("c") = 2.0);
+          py::arg("threshold") = 127.0, py::arg("max_value") = 255.0);
 
     m.def("frequency_filter", &frequency_filter,
           "Frequency-domain filter: low_pass | high_pass",

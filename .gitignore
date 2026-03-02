@@ -4,3 +4,4 @@
 build
 outputs
 media
+scripts/__pycache__

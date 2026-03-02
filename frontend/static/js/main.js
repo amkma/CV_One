@@ -44,11 +44,20 @@ function renderResult(response) {
 
 	const result = response.result || {};
 
+	// Standard output keys
 	["output", "edge", "x", "y", "histogram", "cdf", "second_input"].forEach((key) => {
 		if (result[key]) {
 			appendImage(key.toUpperCase(), result[key]);
 		}
 	});
+
+	// FIX 2: render before/after histograms produced by equalize_image
+	if (result["hist_before"]) {
+		appendImage("Histogram BEFORE Equalization", result["hist_before"]);
+	}
+	if (result["hist_after"]) {
+		appendImage("Histogram AFTER Equalization", result["hist_after"]);
+	}
 }
 
 operationSelect.addEventListener("change", showByOperation);

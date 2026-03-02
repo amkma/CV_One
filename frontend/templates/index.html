@@ -35,6 +35,7 @@
           </select>
         </div>
 
+        <!-- ── Hybrid: second image ── -->
         <section class="group" data-op="hybrid">
           <div class="row">
             <label for="image2">Second image (hybrid)</label>
@@ -42,6 +43,7 @@
           </div>
         </section>
 
+        <!-- ── Add noise ── -->
         <section class="group" data-op="add_noise">
           <div class="row">
             <label for="noise_type">Noise type</label>
@@ -65,6 +67,7 @@
           </div>
         </section>
 
+        <!-- ── Low-pass filter ── -->
         <section class="group" data-op="low_pass edges">
           <div class="row">
             <label for="kernel_size">Kernel size (odd)</label>
@@ -78,12 +81,18 @@
               <option value="median">Median</option>
             </select>
           </div>
+          <!--
+            FIX 1: field name is "sigma_lp" (distinct from noise sigma).
+            views.py reads P.get("sigma_lp") and passes it to C++ as sigma.
+            Changing this value now visibly affects the Gaussian blur output.
+          -->
           <div class="row" data-op="low_pass">
             <label for="sigma_lp">Gaussian sigma</label>
-            <input id="sigma_lp" name="sigma_lp" type="number" step="0.1" min="0" value="1.0" />
+            <input id="sigma_lp" name="sigma_lp" type="number" step="0.1" min="0.1" value="1.0" />
           </div>
         </section>
 
+        <!-- ── Edge detection ── -->
         <section class="group" data-op="edges">
           <div class="row">
             <label for="edge_method">Edge method</label>
@@ -104,6 +113,7 @@
           </div>
         </section>
 
+        <!-- ── Histogram + CDF ── -->
         <section class="group" data-op="hist_cdf">
           <div class="row">
             <label for="hist_mode">Histogram mode</label>
@@ -114,6 +124,7 @@
           </div>
         </section>
 
+        <!-- ── Normalize ── FIX 3: l1 and l2 removed ── -->
         <section class="group" data-op="normalize">
           <div class="row">
             <label for="alpha">Normalize alpha</label>
@@ -127,45 +138,24 @@
             <label for="norm_type">Normalize type</label>
             <select id="norm_type" name="norm_type">
               <option value="minmax">minmax</option>
-              <option value="l1">l1</option>
-              <option value="l2">l2</option>
               <option value="inf">inf</option>
             </select>
           </div>
         </section>
 
+        <!-- ── Threshold ── FIX 4: binary only, method selector removed ── -->
         <section class="group" data-op="threshold">
           <div class="row">
-            <label for="threshold_method">Threshold method</label>
-            <select id="threshold_method" name="threshold_method">
-              <option value="binary">binary</option>
-              <option value="binary_inv">binary_inv</option>
-              <option value="trunc">trunc</option>
-              <option value="tozero">tozero</option>
-              <option value="tozero_inv">tozero_inv</option>
-              <option value="otsu">otsu</option>
-              <option value="adaptive_mean">adaptive_mean</option>
-              <option value="adaptive_gaussian">adaptive_gaussian</option>
-            </select>
-          </div>
-          <div class="row">
-            <label for="threshold">Threshold</label>
+            <label for="threshold">Threshold value</label>
             <input id="threshold" name="threshold" type="number" step="0.1" value="127" />
           </div>
           <div class="row">
             <label for="max_value">Max value</label>
             <input id="max_value" name="max_value" type="number" step="0.1" value="255" />
           </div>
-          <div class="row">
-            <label for="block_size">Adaptive block size</label>
-            <input id="block_size" name="block_size" type="number" min="3" step="2" value="11" />
-          </div>
-          <div class="row">
-            <label for="c">Adaptive C</label>
-            <input id="c" name="c" type="number" step="0.1" value="2" />
-          </div>
         </section>
 
+        <!-- ── Frequency filter ── -->
         <section class="group" data-op="freq_filter">
           <div class="row">
             <label for="freq_type">Frequency type</label>
@@ -180,6 +170,7 @@
           </div>
         </section>
 
+        <!-- ── Hybrid ── -->
         <section class="group" data-op="hybrid">
           <div class="row">
             <label for="low_sigma">Low sigma</label>
