@@ -1,221 +1,282 @@
 {% load static %}
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CV Tasks Tester</title>
-    <link rel="stylesheet" href="{% static 'css/style.css' %}" />
-  </head>
-  <body>
-    <main class="page">
-      <h1>CV Tasks Tester</h1>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CV_One — Computer Vision Lab</title>
+  <link rel="stylesheet" href="{% static 'css/style.css' %}" />
+</head>
+<body>
 
-      <form id="cvForm" class="panel">
+  <!-- ══════════════════ HEADER ══════════════════ -->
+  <header class="site-header">
+    <div class="site-logo">
+      <span class="site-logo-dot"></span>
+      CV_One
+    </div>
+    <span class="site-header-meta">Computer Vision Lab &nbsp;/&nbsp; v2.0</span>
+  </header>
+
+  <!-- ══════════════════ PAGE GRID ══════════════════ -->
+  <div class="page">
+
+    <!-- ════════ SIDEBAR – controls ════════ -->
+    <aside class="sidebar">
+      <form id="cvForm" autocomplete="off">
         {% csrf_token %}
-        <div class="row">
-          <label for="image">Input image</label>
-          <input id="image" name="image" type="file" accept="image/*" required />
+
+        <!-- ── Input Image ── -->
+        <div class="sidebar-section">
+          <div class="section-title">Input</div>
+
+          <div class="field">
+            <label class="field-label" for="image">Image File <span class="req">*</span></label>
+            <input id="image" name="image" type="file" accept="image/*" required />
+          </div>
         </div>
 
-        <div class="row">
-          <label for="operation">Operation</label>
-          <select id="operation" name="operation">
-            <option value="read_info">Read image info</option>
-            <option value="save_grayscale">Convert to grayscale</option>
-            <option value="add_noise">Add noise</option>
-            <option value="low_pass">Low-pass filter</option>
-            <option value="edges">Edge detection</option>
-            <option value="hist_cdf">Histogram + CDF</option>
-            <option value="equalize">Equalize image</option>
-            <option value="normalize">Normalize image</option>
-            <option value="threshold">Thresholding</option>
-            <option value="freq_filter">Frequency filter</option>
-            <option value="hybrid">Hybrid image</option>
-            <!-- PROBLEM 3 FIX: new transformation operation -->
-            <option value="transformation">Transformation (Color → Gray + RGB plots)</option>
-          </select>
+        <!-- ── Operation ── -->
+        <div class="sidebar-section">
+          <div class="section-title">Operation</div>
+
+          <div class="field">
+            <label class="field-label" for="operation">Select Operation</label>
+            <select id="operation" name="operation">
+              <option value="read_info">Read Image Info</option>
+              <option value="save_grayscale">Convert to Grayscale</option>
+              <option value="add_noise">Add Noise</option>
+              <option value="low_pass">Low-Pass Filter</option>
+              <option value="edges">Edge Detection</option>
+              <option value="hist_cdf">Histogram + CDF</option>
+              <option value="equalize">Histogram Equalization</option>
+              <option value="normalize">Normalize Image</option>
+              <option value="threshold">Thresholding</option>
+              <option value="freq_filter">Frequency Filter</option>
+              <option value="hybrid">Hybrid Image</option>
+              <option value="transformation">Transformation (Color → Gray)</option>
+            </select>
+          </div>
         </div>
 
-        <!-- ── Hybrid: second image ── -->
-        <section class="group" data-op="hybrid">
-          <div class="row">
-            <label for="image2">Second image (hybrid)</label>
-            <input id="image2" name="image2" type="file" accept="image/*" />
-          </div>
-        </section>
+        <!-- ════════ Parameters section ════════ -->
+        <div class="sidebar-section" id="paramsSection">
+          <div class="section-title">Parameters</div>
 
-        <!-- ── Add noise ── -->
-        <section class="group" data-op="add_noise">
-          <div class="row">
-            <label for="noise_type">Noise type</label>
-            <select id="noise_type" name="noise_type">
-              <option value="gaussian">Gaussian</option>
-              <option value="uniform">Uniform</option>
-              <option value="salt_pepper">Salt &amp; pepper</option>
-            </select>
+          <!-- ── Add Noise ── -->
+          <div class="op-group" data-op="add_noise">
+            <div class="field">
+              <label class="field-label" for="noise_type">Noise Type</label>
+              <select id="noise_type" name="noise_type">
+                <option value="gaussian">Gaussian</option>
+                <option value="uniform">Uniform</option>
+                <option value="salt_pepper">Salt &amp; Pepper</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="amount">Salt/Pepper Amount (0–1)</label>
+              <input id="amount" name="amount" type="number" step="0.01" min="0" max="1" value="0.05" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="sigma">Gaussian Sigma</label>
+              <input id="sigma" name="sigma" type="number" step="0.1" min="0" value="25" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="uniform_range">Uniform Range</label>
+              <input id="uniform_range" name="uniform_range" type="number" min="1" value="30" />
+            </div>
           </div>
-          <div class="row">
-            <label for="amount">Salt/Pepper amount (0-1)</label>
-            <input id="amount" name="amount" type="number" step="0.01" min="0" max="1" value="0.05" />
-          </div>
-          <div class="row">
-            <label for="sigma">Gaussian sigma</label>
-            <input id="sigma" name="sigma" type="number" step="0.1" min="0" value="25" />
-          </div>
-          <div class="row">
-            <label for="uniform_range">Uniform range</label>
-            <input id="uniform_range" name="uniform_range" type="number" min="1" value="30" />
-          </div>
-        </section>
 
-        <!-- ── Low-pass filter ── -->
-        <section class="group" data-op="low_pass edges">
-          <div class="row">
-            <label for="kernel_size">Kernel size (odd)</label>
-            <input id="kernel_size" name="kernel_size" type="number" min="3" step="2" value="3" />
+          <!-- ── Low-Pass Filter ── -->
+          <div class="op-group" data-op="low_pass">
+            <div class="field">
+              <label class="field-label" for="filter_type">Filter Type</label>
+              <select id="filter_type" name="filter_type">
+                <option value="average">Average</option>
+                <option value="gaussian">Gaussian</option>
+                <option value="median">Median</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="kernel_size_lp">Kernel Size (odd)</label>
+              <input id="kernel_size_lp" name="kernel_size" type="number" min="3" step="2" value="3" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="sigma_lp">Gaussian Sigma</label>
+              <input id="sigma_lp" name="sigma_lp" type="number" step="0.1" min="0.1" value="1.0" />
+            </div>
           </div>
-          <div class="row" data-op="low_pass">
-            <label for="filter_type">Filter type</label>
-            <select id="filter_type" name="filter_type">
-              <option value="average">Average</option>
-              <option value="gaussian">Gaussian</option>
-              <option value="median">Median</option>
-            </select>
-          </div>
-          <div class="row" data-op="low_pass">
-            <label for="sigma_lp">Gaussian sigma</label>
-            <input id="sigma_lp" name="sigma_lp" type="number" step="0.1" min="0.1" value="1.0" />
-          </div>
-        </section>
 
-        <!-- ── Edge detection ── -->
-        <section class="group" data-op="edges">
-          <div class="row">
-            <label for="edge_method">Edge method</label>
-            <select id="edge_method" name="edge_method">
-              <option value="sobel">Sobel</option>
-              <option value="prewitt">Prewitt</option>
-              <option value="roberts">Roberts</option>
-              <option value="canny">Canny</option>
-            </select>
+          <!-- ── Edge Detection ── -->
+          <div class="op-group" data-op="edges">
+            <div class="field">
+              <label class="field-label" for="edge_method">Edge Method</label>
+              <select id="edge_method" name="edge_method">
+                <option value="sobel">Sobel</option>
+                <option value="prewitt">Prewitt</option>
+                <option value="roberts">Roberts</option>
+                <option value="canny">Canny</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="kernel_size_e">Kernel Size (odd)</label>
+              <input id="kernel_size_e" name="kernel_size" type="number" min="3" step="2" value="3" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="threshold1">Canny Threshold 1</label>
+              <input id="threshold1" name="threshold1" type="number" value="50" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="threshold2">Canny Threshold 2</label>
+              <input id="threshold2" name="threshold2" type="number" value="150" />
+            </div>
           </div>
-          <div class="row">
-            <label for="threshold1">Canny threshold 1</label>
-            <input id="threshold1" name="threshold1" type="number" value="50" />
-          </div>
-          <div class="row">
-            <label for="threshold2">Canny threshold 2</label>
-            <input id="threshold2" name="threshold2" type="number" value="150" />
-          </div>
-        </section>
 
-        <!-- ── Histogram + CDF ── -->
-        <section class="group" data-op="hist_cdf">
-          <div class="row">
-            <label for="hist_mode">Histogram mode</label>
-            <select id="hist_mode" name="hist_mode">
-              <option value="gray">Gray</option>
-              <option value="rgb">RGB</option>
-            </select>
+          <!-- ── Histogram + CDF ── -->
+          <div class="op-group" data-op="hist_cdf">
+            <div class="field">
+              <label class="field-label" for="hist_mode">Histogram Mode</label>
+              <select id="hist_mode" name="hist_mode">
+                <option value="gray">Grayscale</option>
+                <option value="rgb">RGB</option>
+              </select>
+            </div>
           </div>
-        </section>
 
-        <!-- ── Normalize ── -->
-        <section class="group" data-op="normalize">
-          <div class="row">
-            <label for="alpha">Normalize alpha</label>
-            <input id="alpha" name="alpha" type="number" step="0.1" value="0" />
+          <!-- ── Normalize ── -->
+          <div class="op-group" data-op="normalize">
+            <div class="field">
+              <label class="field-label" for="alpha">Alpha (min)</label>
+              <input id="alpha" name="alpha" type="number" step="0.1" value="0" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="beta">Beta (max)</label>
+              <input id="beta" name="beta" type="number" step="0.1" value="255" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="norm_type">Normalize Type</label>
+              <select id="norm_type" name="norm_type">
+                <option value="minmax">Min-Max</option>
+                <option value="inf">Inf</option>
+              </select>
+            </div>
           </div>
-          <div class="row">
-            <label for="beta">Normalize beta</label>
-            <input id="beta" name="beta" type="number" step="0.1" value="255" />
-          </div>
-          <div class="row">
-            <label for="norm_type">Normalize type</label>
-            <select id="norm_type" name="norm_type">
-              <option value="minmax">minmax</option>
-              <option value="inf">inf</option>
-            </select>
-          </div>
-        </section>
 
-        <!--
-          PROBLEM 2 FIX: threshold method is Binary (cv::THRESH_BINARY).
-          Rule: pixel > threshold → max_value, else → 0.
-          The label "Binary" is now shown explicitly.
-        -->
-        <section class="group" data-op="threshold">
-          <div class="row">
-            <label>Threshold method</label>
-            <span style="line-height:36px; font-weight:600;">Binary
-              <small style="font-weight:400; color:#6b7280;">
-                (pixel &gt; threshold → max_value, else 0)
-              </small>
-            </span>
+          <!-- ── Threshold ── -->
+          <div class="op-group" data-op="threshold">
+            <div class="field">
+              <div class="param-info">
+                <strong>Method:</strong>&nbsp; Binary &nbsp;
+                <span style="color:var(--text-muted)">pixel &gt; T → max, else 0</span>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label" for="threshold_val">Threshold Value</label>
+              <input id="threshold_val" name="threshold" type="number" step="0.1" value="127" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="max_value">Max Value</label>
+              <input id="max_value" name="max_value" type="number" step="0.1" value="255" />
+            </div>
           </div>
-          <div class="row">
-            <label for="threshold">Threshold value</label>
-            <input id="threshold" name="threshold" type="number" step="0.1" value="127" />
-          </div>
-          <div class="row">
-            <label for="max_value">Max value</label>
-            <input id="max_value" name="max_value" type="number" step="0.1" value="255" />
-          </div>
-        </section>
 
-        <!-- ── Frequency filter ── -->
-        <section class="group" data-op="freq_filter">
-          <div class="row">
-            <label for="freq_type">Frequency type</label>
-            <select id="freq_type" name="freq_type">
-              <option value="low_pass">low_pass</option>
-              <option value="high_pass">high_pass</option>
-            </select>
+          <!-- ── Frequency Filter ── -->
+          <div class="op-group" data-op="freq_filter">
+            <div class="field">
+              <label class="field-label" for="freq_type">Filter Type</label>
+              <select id="freq_type" name="freq_type">
+                <option value="low_pass">Low-Pass</option>
+                <option value="high_pass">High-Pass</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="cutoff">Cutoff Radius</label>
+              <input id="cutoff" name="cutoff" type="number" min="1" value="30" />
+            </div>
           </div>
-          <div class="row">
-            <label for="cutoff">Cutoff radius</label>
-            <input id="cutoff" name="cutoff" type="number" min="1" value="30" />
-          </div>
-        </section>
 
-        <!-- ── Hybrid ── -->
-        <section class="group" data-op="hybrid">
-          <div class="row">
-            <label for="low_sigma">Low sigma</label>
-            <input id="low_sigma" name="low_sigma" type="number" step="0.1" min="0.1" value="5.0" />
+          <!-- ── Hybrid Image ── -->
+          <div class="op-group" data-op="hybrid">
+            <div class="field">
+              <label class="field-label" for="image2">Second Image <span class="req">*</span></label>
+              <input id="image2" name="image2" type="file" accept="image/*" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="low_sigma">Low Sigma</label>
+              <input id="low_sigma" name="low_sigma" type="number" step="0.1" min="0.1" value="5.0" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="high_sigma">High Sigma</label>
+              <input id="high_sigma" name="high_sigma" type="number" step="0.1" min="0.1" value="3.0" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="mix_weight">Mix Weight (0–1)</label>
+              <input id="mix_weight" name="mix_weight" type="number" step="0.01" min="0" max="1" value="0.5" />
+            </div>
           </div>
-          <div class="row">
-            <label for="high_sigma">High sigma</label>
-            <input id="high_sigma" name="high_sigma" type="number" step="0.1" min="0.1" value="3.0" />
-          </div>
-          <div class="row">
-            <label for="mix_weight">Mix weight (0-1)</label>
-            <input id="mix_weight" name="mix_weight" type="number" step="0.01" min="0" max="1" value="0.5" />
-          </div>
-        </section>
 
-        <!-- ── Transformation: no extra controls needed ── -->
-        <section class="group" data-op="transformation">
-          <div class="row">
-            <label>Output</label>
-            <span style="line-height:36px; color:#6b7280;">
-              Grayscale image + Histogram &amp; CDF for Gray, R, G, B channels
-            </span>
+          <!-- ── Operations with no parameters ── -->
+          <div class="op-group" data-op="read_info save_grayscale equalize transformation">
+            <div class="param-info">
+              No additional parameters required.
+            </div>
           </div>
-        </section>
 
-        <button type="submit">Run</button>
-        <span id="status"></span>
+        </div><!-- /paramsSection -->
+
+        <!-- ── Run ── -->
+        <div class="sidebar-section">
+          <button type="submit" class="btn-run" id="runBtn">▶ &nbsp; Run Operation</button>
+        </div>
+
       </form>
+    </aside>
 
-      <section class="panel">
-        <h2>Preview</h2>
-        <div id="images" class="images"></div>
+    <!-- ════════ MAIN CONTENT ════════ -->
+    <div class="main-content">
+
+      <!-- Status bar -->
+      <div class="status-bar">
+        <div class="status-indicator" id="statusDot"></div>
+        <span class="status-text" id="statusText">Ready — select an operation and upload an image</span>
+      </div>
+
+      <!-- Output images -->
+      <div class="output-zone">
+        <!-- Empty state (shown before first run) -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-state-icon">⬡</div>
+          <div class="empty-state-title">No Output Yet</div>
+          <div class="empty-state-sub">
+            Upload an image, choose an operation, set parameters,<br>and hit <strong style="color:var(--amber)">Run</strong>.
+          </div>
+        </div>
+
+        <!-- Results grid (hidden until first run) -->
+        <div class="images-grid" id="imagesGrid"></div>
+      </div>
+
+      <!-- JSON debug panel -->
+      <div class="json-panel" id="jsonPanel" style="display:none">
+        <div class="json-panel-header">
+          <span class="json-panel-title">API Response JSON</span>
+          <button class="json-toggle" id="jsonToggle">HIDE</button>
+        </div>
         <pre id="jsonOut"></pre>
-      </section>
-    </main>
+      </div>
 
-    <script src="{% static 'js/main.js' %}"></script>
-  </body>
+    </div><!-- /main-content -->
+  </div><!-- /page -->
+
+  <script src="{% static 'js/main.js' %}"></script>
+
+  <script>
+    /* Hide empty state once first result is rendered */
+    const _origRender = window.renderResult;
+    document.getElementById('cvForm').addEventListener('submit', () => {
+      document.getElementById('emptyState').style.display = 'none';
+    });
+  </script>
+
+</body>
 </html>
