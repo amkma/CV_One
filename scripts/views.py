@@ -135,18 +135,20 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
         )}
 
     if op == "low_pass":
+        # Uses lp_kernel_size (unique name) to avoid collision with edge_kernel_size
         return {"output": cv_core.apply_low_pass_filter(
             str(inp), str(odir / f"{tok}_lp.png"),
             P.get("filter_type", "gaussian"),
-            _int(P.get("kernel_size"), 3),
+            _int(P.get("lp_kernel_size"), 3),
             _float(P.get("sigma_lp"), 1.0),
         )}
 
     if op == "edges":
+        # Uses edge_kernel_size (unique name) to avoid collision with lp_kernel_size
         return cv_core.detect_edges(
             str(inp), str(odir / f"{tok}_edge"),
             P.get("edge_method", "sobel"),
-            _int(P.get("kernel_size"), 3),
+            _int(P.get("edge_kernel_size"), 3),
             _float(P.get("threshold1"), 50.0),
             _float(P.get("threshold2"), 150.0),
         )
@@ -159,9 +161,6 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             P.get("hist_mode", "gray"),
         )
 
-    # PROBLEM 1 FIX: equalize now takes only input + prefix.
-    # C++ produces output_gray, output_color_eq,
-    # before_gray/b/g/r and after_gray/b/g/r.
     if op == "equalize":
         prefix = str(odir / tok)
         return cv_core.equalize_image(str(inp), prefix)
@@ -174,7 +173,6 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             P.get("norm_type", "minmax"),
         )}
 
-    # PROBLEM 2 FIX: threshold uses Binary method (displayed in UI)
     if op == "threshold":
         return {"output": cv_core.apply_threshold(
             str(inp), str(odir / f"{tok}_thresh.png"),
@@ -204,7 +202,6 @@ def _dispatch(op: str, request, inp: Path, odir: Path, tok: str) -> dict:
             "second_input": str(inp2),
         }
 
-    # PROBLEM 3 FIX: new transformation operation
     if op == "transformation":
         prefix = str(odir / tok)
         return cv_core.color_to_gray_transform(str(inp), prefix)

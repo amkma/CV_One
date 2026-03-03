@@ -98,8 +98,8 @@
               </select>
             </div>
             <div class="field">
-              <label class="field-label" for="kernel_size_lp">Kernel Size (odd)</label>
-              <input id="kernel_size_lp" name="kernel_size" type="number" min="3" step="2" value="3" />
+              <label class="field-label" for="lp_kernel_size">Kernel Size (odd)</label>
+              <input id="lp_kernel_size" name="lp_kernel_size" type="number" min="3" step="2" value="3" />
             </div>
             <div class="field">
               <label class="field-label" for="sigma_lp">Gaussian Sigma</label>
@@ -119,8 +119,8 @@
               </select>
             </div>
             <div class="field">
-              <label class="field-label" for="kernel_size_e">Kernel Size (odd)</label>
-              <input id="kernel_size_e" name="kernel_size" type="number" min="3" step="2" value="3" />
+              <label class="field-label" for="edge_kernel_size">Kernel Size (odd)</label>
+              <input id="edge_kernel_size" name="edge_kernel_size" type="number" min="3" step="2" value="3" />
             </div>
             <div class="field">
               <label class="field-label" for="threshold1">Canny Threshold 1</label>
@@ -252,7 +252,7 @@
           </div>
         </div>
 
-        <!-- Results grid (hidden until first run) -->
+        <!-- Results grid -->
         <div class="images-grid" id="imagesGrid"></div>
       </div>
 
@@ -272,7 +272,6 @@
 
   <script>
     /* Hide empty state once first result is rendered */
-    const _origRender = window.renderResult;
     document.getElementById('cvForm').addEventListener('submit', () => {
       document.getElementById('emptyState').style.display = 'none';
     });

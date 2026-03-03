@@ -492,7 +492,6 @@ input:hover, select:hover {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: #0a0c10;
-  /* Ensure graphs are crisp */
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
 }
@@ -501,6 +500,120 @@ input:hover, select:hover {
 .img-card.graph img {
   min-height: 200px;
   object-fit: contain;
+}
+
+/* ── Histogram + CDF full-width row ───────────────────── */
+.hist-cdf-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: card-in 0.35s ease both;
+}
+
+.hist-cdf-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.hist-cdf-card {
+  width: 100%;
+  min-width: 0;
+}
+
+.hist-cdf-body {
+  padding: 12px;
+  background: var(--bg-input);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hist-cdf-body img {
+  width: 100%;
+  height: auto;
+  min-height: 220px;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: #fff;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Single full-width histogram row (for gray/blue in transformation) */
+.hist-single-row {
+  grid-column: 1 / -1;
+  animation: card-in 0.35s ease both;
+}
+
+.hist-full-card {
+  width: 100%;
+}
+
+.hist-full-card .hist-cdf-body img {
+  max-height: 320px;
+}
+
+/* ── Compare Row (side-by-side before/after) ───────────── */
+.compare-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 4px;
+  animation: card-in 0.35s ease both;
+}
+
+.compare-row-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 6px 2px 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compare-row-label::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  background: var(--border-light);
+  border-radius: 1px;
+}
+
+.compare-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* Each card inside a compare row fills its column */
+.compare-card {
+  width: 100%;
+}
+
+.compare-card .img-card-body {
+  padding: 10px;
+}
+
+.compare-card img {
+  width: 100%;
+  height: auto;
+  min-height: 160px;
+  object-fit: contain;
+}
+
+/* Divider strip between Before/After columns */
+.compare-cols::before {
+  display: none; /* handled by gap */
 }
 
 /* ── JSON Output ───────────────────────────────────────── */
@@ -602,6 +715,11 @@ pre#jsonOut::-webkit-scrollbar-thumb { background: var(--border-light); border-r
 
   .images-grid .img-card.wide {
     grid-column: span 1;
+  }
+
+  .compare-cols,
+  .hist-cdf-cols {
+    grid-template-columns: 1fr;
   }
 }
 

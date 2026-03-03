@@ -71,8 +71,17 @@ cv::Mat magnitude_preview(const cv::Mat& gx, const cv::Mat& gy)
     return out;
 }
 
+/*
+ * dft_shift
+ * ─────────
+ * Shifts the zero-frequency component to the centre of the spectrum.
+ * NOTE: This operates IN-PLACE and also crops the matrix to even dimensions.
+ *       The returned size may differ from the input; callers that need the
+ *       exact post-crop size should query m.size() afterwards.
+ */
 void dft_shift(cv::Mat& m)
 {
+    // Crop to even dimensions
     m = m(cv::Rect(0, 0, m.cols & -2, m.rows & -2));
     int cx = m.cols / 2, cy = m.rows / 2;
 
@@ -375,41 +384,21 @@ py::dict draw_histogram_and_cdf(const std::string& in,
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  7. Histogram equalization  (PROBLEM 1 FIX)
- * ═══════════════════════════════════════════════════════════════
- *
- * LOGIC:
- *  • Load as COLOR (BGR).
- *  • Grayscale output: convert BGR→GRAY, equalize the gray channel.
- *    The original RGB values are NOT changed for the grayscale path;
- *    we only produce a grayscale equalized image as visual output.
- *  • Color equalized output: equalize each B, G, R channel
- *    independently using cv::equalizeHist, then merge back.
- *  • BEFORE graphs: gray hist+CDF, B hist+CDF, G hist+CDF, R hist+CDF
- *    (from original image).
- *  • AFTER  graphs: same four panels from the equalized versions.
- *
- *  Each graph canvas is 1024×400 (histogram left, CDF right).
- *
- *  Returns dict keys:
- *    output_gray      – equalized grayscale image
- *    output_color_eq  – color image with each channel equalized
- *    before_gray / before_b / before_g / before_r
- *    after_gray  / after_b  / after_g  / after_r
- * ════════════════════════════════════════════════════════════════ */
+ *  7. Histogram equalization
+ * ═══════════════════════════════════════════════════════════════ */
 
 py::dict equalize_image(const std::string& in,
                         const std::string& prefix)
 {
     cv::Mat color = load_image(in, "color");     // BGR
 
-    // ── Grayscale: convert then equalize ─────────────────────
+    // Grayscale: convert then equalize
     cv::Mat gray;
     cv::cvtColor(color, gray, cv::COLOR_BGR2GRAY);
     cv::Mat gray_eq;
     cv::equalizeHist(gray, gray_eq);
 
-    // ── Color: equalize each channel independently ────────────
+    // Color: equalize each channel independently
     std::vector<cv::Mat> channels(3);
     cv::split(color, channels);                  // [0]=B [1]=G [2]=R
 
@@ -420,19 +409,19 @@ py::dict equalize_image(const std::string& in,
     cv::Mat color_eq;
     cv::merge(eq_ch, color_eq);
 
-    // ── Save output images ────────────────────────────────────
+    // Save output images
     std::string p_gray     = prefix + "_eq_gray.png";
     std::string p_color_eq = prefix + "_eq_color.png";
     save_image(p_gray,     gray_eq);
     save_image(p_color_eq, color_eq);
 
-    // ── Color scalars (BGR order) ─────────────────────────────
-    cv::Scalar colK(  0,   0,   0);   // black  – gray
-    cv::Scalar colB(200,  80,  80);   // blue channel
-    cv::Scalar colG( 50, 160,  50);   // green channel
-    cv::Scalar colR( 50,  50, 200);   // red channel
+    // Color scalars (BGR order)
+    cv::Scalar colK(  0,   0,   0);
+    cv::Scalar colB(200,  80,  80);
+    cv::Scalar colG( 50, 160,  50);
+    cv::Scalar colR( 50,  50, 200);
 
-    // ── BEFORE graphs ─────────────────────────────────────────
+    // BEFORE graphs
     std::string p_bef_gray = prefix + "_bef_gray.png";
     std::string p_bef_b    = prefix + "_bef_b.png";
     std::string p_bef_g    = prefix + "_bef_g.png";
@@ -443,7 +432,7 @@ py::dict equalize_image(const std::string& in,
     save_image(p_bef_g,    draw_channel_hist_and_cdf(channels[1], colG));
     save_image(p_bef_r,    draw_channel_hist_and_cdf(channels[2], colR));
 
-    // ── AFTER graphs ──────────────────────────────────────────
+    // AFTER graphs
     std::string p_aft_gray = prefix + "_aft_gray.png";
     std::string p_aft_b    = prefix + "_aft_b.png";
     std::string p_aft_g    = prefix + "_aft_g.png";
@@ -487,11 +476,7 @@ std::string normalize_image(const std::string& in,
 }
 
 /* ───────────────────────────────────────────────────────────────
- *  9. Thresholding  (PROBLEM 2 FIX)
- * ───────────────────────────────────────────────────────────────
- * Method used: Binary Thresholding (cv::THRESH_BINARY).
- * Rule: pixel > thresh  →  max_val,  else  →  0.
- * The UI now labels this "Binary" explicitly.
+ *  9. Thresholding
  * ─────────────────────────────────────────────────────────────── */
 
 std::string apply_threshold(const std::string& in,
@@ -506,64 +491,27 @@ std::string apply_threshold(const std::string& in,
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  10. Color → Grayscale Transformation  (PROBLEM 3 – NEW)
- * ═══════════════════════════════════════════════════════════════
- *
- * LOGIC (correct and verified):
- *
- *  Step 1 – Load the color (BGR) image.
- *
- *  Step 2 – Convert to grayscale using OpenCV's BGR→GRAY:
- *              Y = 0.114·B + 0.587·G + 0.299·R   (ITU-R BT.601)
- *           This is the standard luminance-weighted formula that
- *           matches human perception of brightness.
- *
- *  Step 3 – Split the original image into its B, G, R channels.
- *
- *  Step 4 – For EACH of the four channels (Gray, B, G, R):
- *       a. Compute a 256-bin histogram over [0, 255].
- *       b. Compute the CDF as the cumulative sum of the histogram,
- *          normalised to [0, canvas-height].
- *          This CDF is the exact mapping function used in
- *          histogram equalisation:
- *            T(r) = (L-1) / N  ×  Σ_{j=0}^{r} h(j)
- *          where L=256, N=total pixels, h(j)=count at bin j.
- *       c. Draw histogram (left panel) + CDF (right panel)
- *          on a 1024×400 canvas.
- *
- *  Step 5 – Save the grayscale image and the four graph canvases.
- *
- *  Returns dict:
- *    output_gray  – converted grayscale image
- *    hist_gray    – gray  histogram + CDF
- *    hist_b       – Blue  histogram + CDF
- *    hist_g       – Green histogram + CDF
- *    hist_r       – Red   histogram + CDF
- * ════════════════════════════════════════════════════════════════ */
+ *  10. Color → Grayscale Transformation
+ * ═══════════════════════════════════════════════════════════════ */
 
 py::dict color_to_gray_transform(const std::string& in,
                                  const std::string& prefix)
 {
-    // Step 1: load color (BGR)
     cv::Mat color = load_image(in, "color");
 
-    // Step 2: convert to grayscale (Y = 0.114B + 0.587G + 0.299R)
     cv::Mat gray;
     cv::cvtColor(color, gray, cv::COLOR_BGR2GRAY);
 
-    // Step 3: save grayscale output
     std::string p_gray = prefix + "_transform_gray.png";
     save_image(p_gray, gray);
 
-    // Step 4: split channels [0]=B [1]=G [2]=R
     std::vector<cv::Mat> channels(3);
     cv::split(color, channels);
 
-    // Step 5: draw histogram+CDF for each channel
-    cv::Scalar colK(  0,   0,   0);   // black  – gray
-    cv::Scalar colB(200,  80,  80);   // blue
-    cv::Scalar colG( 50, 160,  50);   // green
-    cv::Scalar colR( 50,  50, 200);   // red
+    cv::Scalar colK(  0,   0,   0);
+    cv::Scalar colB(200,  80,  80);
+    cv::Scalar colG( 50, 160,  50);
+    cv::Scalar colR( 50,  50, 200);
 
     std::string p_hist_gray = prefix + "_transform_hist_gray.png";
     std::string p_hist_b    = prefix + "_transform_hist_b.png";
@@ -584,7 +532,24 @@ py::dict color_to_gray_transform(const std::string& in,
     return result;
 }
 
-/* ───────────────── 11a. Frequency-domain filter ───────────── */
+/* ═══════════════════════════════════════════════════════════════
+ *  11a. Frequency-domain filter  (FIX: mask built from DFT size)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * ROOT CAUSE of the original crash
+ * ──────────────────────────────────
+ * cv::mulSpectrums requires both operands to have identical size AND type.
+ * The old code:
+ *   1. Created `cpx` (complex) from the original gray image size.
+ *   2. Called dft_shift(cpx) which crops cpx to even dimensions – so
+ *      cpx.size() may now differ from gray.size().
+ *   3. Built `mask` from gray.size() – WRONG, it must match cpx.size().
+ *   4. mulSpectrums(cpx, cmask, …) → size mismatch → assertion failure.
+ *
+ * FIX: build the mask AFTER the DFT+shift so we use cpx.size().
+ *      Also ensure the mask is CV_32F (same type as the DFT planes)
+ *      before merging it into the 2-channel complex mask.
+ * ═══════════════════════════════════════════════════════════════ */
 
 std::string frequency_filter(const std::string& in,
                              const std::string& out,
@@ -592,33 +557,61 @@ std::string frequency_filter(const std::string& in,
                              int cutoff)
 {
     cv::Mat gray = load_image(in, "gray");
-    cv::Mat flt;
-    gray.convertTo(flt, CV_32F);
 
-    cv::Mat planes[] = {flt, cv::Mat::zeros(gray.size(), CV_32F)};
+    // Pad to optimal DFT size for speed
+    int optRows = cv::getOptimalDFTSize(gray.rows);
+    int optCols = cv::getOptimalDFTSize(gray.cols);
+    cv::Mat padded;
+    cv::copyMakeBorder(gray, padded,
+                       0, optRows - gray.rows,
+                       0, optCols - gray.cols,
+                       cv::BORDER_CONSTANT, cv::Scalar::all(0));
+
+    // Build complex matrix and compute DFT
+    cv::Mat flt;
+    padded.convertTo(flt, CV_32F);
+    cv::Mat planes[] = {flt, cv::Mat::zeros(flt.size(), CV_32F)};
     cv::Mat cpx;
     cv::merge(planes, 2, cpx);
     cv::dft(cpx, cpx);
+
+    // Shift zero-frequency to centre; cpx may be cropped to even dims
     dft_shift(cpx);
 
+    // ── FIX: build mask from cpx.size() (post-crop), not gray.size() ──
     cutoff = std::max(1, cutoff);
-    cv::Mat mask(gray.size(), CV_32F, cv::Scalar(0));
-    cv::circle(mask, {mask.cols / 2, mask.rows / 2}, cutoff, cv::Scalar(1), -1);
-    if (type == "high_pass")
-        mask = cv::Scalar(1) - mask;
+    cv::Mat mask(cpx.rows, cpx.cols, CV_32F, cv::Scalar(0.0f));
+    cv::circle(mask,
+               cv::Point(mask.cols / 2, mask.rows / 2),
+               cutoff,
+               cv::Scalar(1.0f),
+               -1);
 
+    if (type == "high_pass")
+        mask = cv::Scalar(1.0f) - mask;
+
+    // Merge single-channel mask into a 2-channel complex mask
     cv::Mat fp[] = {mask, mask};
     cv::Mat cmask;
-    cv::merge(fp, 2, cmask);
+    cv::merge(fp, 2, cmask);   // same size & type as cpx ✓
+
+    // Apply mask in frequency domain
     cv::mulSpectrums(cpx, cmask, cpx, 0);
 
+    // Inverse shift + IDFT
     dft_shift(cpx);
     cv::Mat inv;
     cv::idft(cpx, inv, cv::DFT_REAL_OUTPUT | cv::DFT_SCALE);
-    cv::normalize(inv, inv, 0, 255, cv::NORM_MINMAX);
+
+    // Crop back to original image size and normalise
+    cv::Mat cropped = inv(cv::Rect(0, 0,
+                                   std::min(inv.cols, gray.cols),
+                                   std::min(inv.rows, gray.rows)));
+    cv::Mat norm;
+    cv::normalize(cropped, norm, 0, 255, cv::NORM_MINMAX);
 
     cv::Mat dst;
-    inv.convertTo(dst, CV_8U);
+    norm.convertTo(dst, CV_8U);
     return save_image(out, dst);
 }
 
